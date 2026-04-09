@@ -620,7 +620,7 @@ private struct MarketplaceSkillDetailView: View {
         defer { isInstalling = false }
 
         do {
-            let result = try await client.installMarketplaceSkill(slug: skill.slug, source: skill.source)
+            _ = try await client.installMarketplaceSkill(slug: skill.slug, source: skill.source)
             didInstall = true
             installState = nil
             Haptics.success()

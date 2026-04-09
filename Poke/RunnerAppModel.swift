@@ -300,7 +300,7 @@ final class RunnerAppModel: ObservableObject {
             return "Sign in to load your agents"
         }
 
-        if let agentsLoadError, agents.isEmpty {
+        if agentsLoadError != nil, agents.isEmpty {
             return "Couldn’t load agents"
         }
 
