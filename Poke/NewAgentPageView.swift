@@ -525,12 +525,14 @@ struct NewAgentPageView: View {
                     )
             }
             .buttonStyle(ScaleButtonStyle())
+            .zIndex(20)
 
             Spacer()
 
             Color.clear
                 .frame(width: 40, height: 40)
         }
+        .zIndex(20)
     }
 
     private var hero: some View {
@@ -548,14 +550,14 @@ struct NewAgentPageView: View {
                 .tracking(-0.4)
                 .padding(.top, 18)
         }
-        .offset(y: -8)
+        .offset(y: 30)
         .animation(.interactiveSpring(response: 0.48, dampingFraction: 0.84, blendDuration: 0.16), value: selectedTemplate.id)
     }
 
     private var carouselSection: some View {
         VStack(spacing: 12) {
             GeometryReader { proxy in
-                let cardSize = min(proxy.size.width * 0.56, 188)
+                let cardSize = min(proxy.size.width * 0.73, 244)
                 let slotWidth = cardSize * 1.08
                 let sideInset = (proxy.size.width - slotWidth) / 2
                 let viewportMidX = proxy.frame(in: .global).midX
@@ -607,7 +609,7 @@ struct NewAgentPageView: View {
                 .scrollPosition(id: $selectedTemplateID, anchor: .center)
                 .scrollClipDisabled()
             }
-            .frame(height: 250)
+            .frame(height: 325)
 
             HStack(spacing: 8) {
                 ForEach(templates.indices, id: \.self) { index in
@@ -846,7 +848,6 @@ private struct NewAgentDetailOverlay: View {
     let onClose: () -> Void
 
     @State private var contentVisible = false
-    @State private var panelTilt = -10.0
     @State private var dragOffset: CGFloat = 0
 
     private var dismissProgress: CGFloat {
@@ -888,6 +889,9 @@ private struct NewAgentDetailOverlay: View {
                             )
                     }
                     .buttonStyle(ScaleButtonStyle())
+                    .opacity(contentVisible ? 1 : 0)
+                    .offset(y: contentVisible ? 0 : -20)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.82).delay(0.12), value: contentVisible)
 
                     Spacer()
                 }
@@ -931,15 +935,17 @@ private struct NewAgentDetailOverlay: View {
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
                         .opacity(contentVisible ? 1 : 0)
-                        .offset(y: contentVisible ? 0 : 10)
-                        .animation(.easeInOut(duration: 0.18).delay(0.06), value: contentVisible)
+                        .offset(y: contentVisible ? 0 : 14)
+                        .animation(.spring(response: 0.45, dampingFraction: 0.84).delay(0.06), value: contentVisible)
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 260)
                 .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
-                .rotation3DEffect(.degrees(contentVisible ? 0 : panelTilt), axis: (x: 0, y: 1, z: 0))
                 .shadow(color: Color.black.opacity(0.30), radius: 24, x: 0, y: 22)
                 .padding(.horizontal, 20)
+                .opacity(contentVisible ? 1 : 0.6)
+                .scaleEffect(contentVisible ? 1.0 : 0.88)
+                .animation(.spring(response: 0.48, dampingFraction: 0.82), value: contentVisible)
 
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
@@ -950,9 +956,9 @@ private struct NewAgentDetailOverlay: View {
                                 .lineSpacing(4)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .opacity(contentVisible ? 1 : 0)
-                                .offset(y: contentVisible ? 0 : 18)
+                                .offset(y: contentVisible ? 0 : 24)
                                 .animation(
-                                    .spring(response: 0.48, dampingFraction: 0.88).delay(0.05 * Double(index)),
+                                    .spring(response: 0.50, dampingFraction: 0.84).delay(0.10 + 0.06 * Double(index)),
                                     value: contentVisible
                                 )
                         }
@@ -962,15 +968,15 @@ private struct NewAgentDetailOverlay: View {
                     .padding(.bottom, 34)
                 }
                 .opacity(contentVisible ? 1 : 0)
+                .animation(.easeOut(duration: 0.25).delay(0.08), value: contentVisible)
             }
             .offset(y: dragOffset)
             .scaleEffect(1 - (dismissProgress * 0.06), anchor: .top)
             .simultaneousGesture(pullToDismissGesture)
         }
         .task {
-            withAnimation(.spring(response: 0.46, dampingFraction: 0.88)) {
+            withAnimation(.spring(response: 0.50, dampingFraction: 0.86)) {
                 contentVisible = true
-                panelTilt = 0
             }
         }
     }
@@ -978,14 +984,13 @@ private struct NewAgentDetailOverlay: View {
     private func dismiss() {
         Haptics.navigate()
 
-        withAnimation(.easeInOut(duration: 0.22)) {
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) {
             contentVisible = false
-            panelTilt = -8
             dragOffset = 0
         }
 
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(220))
+            try? await Task.sleep(for: .milliseconds(300))
             onClose()
         }
     }
@@ -1177,10 +1182,10 @@ private struct NewAgentProvisioningView: View {
             amplitudeX: template.figureStyle.amplitudeX,
             amplitudeY: template.figureStyle.amplitudeY,
             rotation: template.figureStyle.rotation,
-            glowColors: template.figureStyle.glowColors,
+            glowColors: template.figureStyle.glowColors.map { $0.opacity(0.5) },
             strokeColors: template.figureStyle.strokeColors,
-            glowLineWidth: template.figureStyle.glowLineWidth * 1.5,
-            strokeLineWidth: template.figureStyle.strokeLineWidth * 1.5
+            glowLineWidth: template.figureStyle.glowLineWidth * 1.2,
+            strokeLineWidth: template.figureStyle.strokeLineWidth * 1.3
         )
     }
 

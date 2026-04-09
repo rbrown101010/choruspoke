@@ -163,7 +163,7 @@ struct RunnerLissajousView: View {
                 let crispPath = lissajousPath(in: rect, time: time, amplitudeScale: 0.96)
 
                 var glowContext = context
-                glowContext.addFilter(.blur(radius: 14))
+                glowContext.addFilter(.blur(radius: 10))
                 glowContext.stroke(
                     glowPath,
                     with: .linearGradient(
@@ -171,7 +171,7 @@ struct RunnerLissajousView: View {
                         startPoint: CGPoint(x: rect.minX, y: rect.midY),
                         endPoint: CGPoint(x: rect.maxX, y: rect.midY)
                     ),
-                    style: StrokeStyle(lineWidth: style.glowLineWidth, lineCap: .round, lineJoin: .round)
+                    style: StrokeStyle(lineWidth: style.glowLineWidth * 0.6, lineCap: .round, lineJoin: .round)
                 )
 
                 context.stroke(
@@ -181,7 +181,7 @@ struct RunnerLissajousView: View {
                         startPoint: CGPoint(x: rect.minX, y: rect.minY),
                         endPoint: CGPoint(x: rect.maxX, y: rect.maxY)
                     ),
-                    style: StrokeStyle(lineWidth: style.strokeLineWidth, lineCap: .round, lineJoin: .round)
+                    style: StrokeStyle(lineWidth: style.strokeLineWidth * 1.6, lineCap: .round, lineJoin: .round)
                 )
 
             }
