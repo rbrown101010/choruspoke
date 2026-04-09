@@ -1,151 +1,211 @@
 import SwiftUI
 
+private enum HomeSheet: String, Identifiable {
+    case files
+    case skills
+    case connections
+    case cron
+    case channels
+    case settings
+
+    var id: String { rawValue }
+}
+
+private enum HomeRoute: String, Identifiable {
+    case newAgent
+
+    var id: String { rawValue }
+}
+
 struct HomeView: View {
-    @State private var showFiles = false
-    @State private var showSkills = false
-    @State private var showConnections = false
-    @State private var showCronjobs = false
-    @State private var showChat = false
-    @State private var showSettings = false
-    @Environment(\.colorScheme) private var colorScheme
-    
+    @EnvironmentObject private var appModel: RunnerAppModel
+    @State private var activeSheet: HomeSheet?
+    @State private var activeRoute: HomeRoute?
+
     var body: some View {
         ZStack {
-            // Dark gradient background - no blue, pure greys
-            LinearGradient(
-                colors: colorScheme == .dark
-                    ? [Color(white: 0.06), Color(white: 0.11)]
-                    : [Color(white: 0.955), Color(white: 0.975)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-            
+            RunnerBackgroundView()
+
             VStack(spacing: 0) {
-                // Top bar — just the profile avatar on the right
                 topBar
                     .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                
+                    .padding(.top, 10)
+
                 Spacer()
-                
-                // Agent info right above buttons
-                agentInfo
-                    .padding(.bottom, 28)
-                
-                // Bottom tab grid: 2 on top, 3 on bottom
+
+                hero
+                    .offset(y: -84)
+
                 bottomTabs
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, 24)
             }
         }
-        .sheet(isPresented: $showFiles) {
-            FilesSheetView()
-                .presentationDetents([.fraction(0.8)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
+        .task {
+            await appModel.bootstrapApp()
         }
-        .sheet(isPresented: $showSkills) {
-            SkillsSheetView()
-                .presentationDetents([.fraction(0.8)])
+        .sheet(item: $activeSheet) { sheet in
+            destination(for: sheet)
+                .presentationDetents([sheet == .files ? .fraction(0.90) : .fraction(0.86)])
                 .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
         }
-        .sheet(isPresented: $showConnections) {
-            ConnectionsSheetView()
-                .presentationDetents([.fraction(0.8)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
-        }
-        .sheet(isPresented: $showCronjobs) {
-            CronJobsSheetView()
-                .presentationDetents([.fraction(0.8)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
-        }
-        .sheet(isPresented: $showChat) {
-            ChatSheetView()
-                .presentationDetents([.fraction(0.8)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-                .presentationDetents([.fraction(0.8)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(PokeTheme.cardBackground)
-                .onAppear { Haptics.sheetOpen() }
+        .navigationDestination(item: $activeRoute) { route in
+            switch route {
+            case .newAgent:
+                NewAgentPageView()
+            }
         }
     }
-    
-    // MARK: - Top Bar (cleaned: no "OpenClaw", no date)
+
     private var topBar: some View {
         HStack {
+            agentSelector
+
             Spacer()
-            
+
             Button {
                 Haptics.tap()
-                showSettings = true
+                activeSheet = .settings
             } label: {
                 ZStack {
                     Circle()
-                        .fill(PokeTheme.accent)
-                        .frame(width: 34, height: 34)
-                    
+                        .fill(
+                            LinearGradient(
+                                colors: [RunnerTheme.accentBlue, RunnerTheme.accent],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 38, height: 38)
+
                     Text("R")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(RunnerTypography.sans(15, weight: .bold))
                         .foregroundStyle(.white)
                 }
             }
         }
     }
-    
-    // MARK: - Agent Info
-    private var agentInfo: some View {
-        VStack(spacing: 6) {
-            Text("Zampa")
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundStyle(PokeTheme.primaryText)
-            
-            Text("Your chorus.com agent")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(PokeTheme.secondaryText)
+
+    private var agentSelector: some View {
+        Menu {
+            Button {
+            } label: {
+                Label("Runner Agent", systemImage: "checkmark")
+            }
+            .disabled(true)
+
+            Divider()
+
+            Button {
+                Haptics.mainButton()
+                activeRoute = .newAgent
+            } label: {
+                Label("New Agent", systemImage: "plus")
+            }
+
+            Divider()
+
+            ForEach(2...5, id: \.self) { index in
+                Button("Agent \(index)") {
+                }
+                .disabled(true)
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("Runner Agent")
+                    .font(RunnerTypography.sans(13, weight: .semibold))
+                    .foregroundStyle(RunnerTheme.primaryText)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(RunnerTheme.secondaryText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(RunnerTheme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(RunnerTheme.borderStrong, lineWidth: 1)
+            )
         }
     }
-    
-    // MARK: - Bottom Tabs
+
+    private var hero: some View {
+        VStack(spacing: 0) {
+            RunnerLissajousView()
+                .frame(width: 336, height: 236)
+                .offset(y: -42)
+                .padding(.bottom, -24)
+
+            Text(appModel.agentTitle)
+                .font(RunnerTypography.sans(34, weight: .semibold))
+                .foregroundStyle(RunnerTheme.primaryText)
+                .tracking(-0.6)
+                .padding(.top, -18)
+
+            VStack(spacing: 4) {
+                Text(appModel.agentStatusLine)
+                    .font(RunnerTypography.sans(14, weight: .medium))
+                    .foregroundStyle(RunnerTheme.primaryText.opacity(0.76))
+                    .multilineTextAlignment(.center)
+
+                Text(appModel.agentSubtitle)
+                    .font(RunnerTypography.sans(14, weight: .medium))
+                    .foregroundStyle(RunnerTheme.secondaryText)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 34)
+            .padding(.top, 10)
+        }
+        .offset(y: -26)
+    }
+
     private var bottomTabs: some View {
-        VStack(spacing: 10) {
-            // Row 1: 2 wider buttons
-            HStack(spacing: 10) {
-                ActionButton(icon: "clock", label: "Cron Jobs") {
-                    showCronjobs = true
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                ActionButton(icon: .cron, label: "Cron Jobs") {
+                    activeSheet = .cron
                 }
-                
-                ActionButton(icon: "link", label: "Connections") {
-                    showConnections = true
-                }
-            }
-            
-            // Row 2: 3 buttons
-            HStack(spacing: 10) {
-                ActionButton(icon: "folder.fill", label: "Files") {
-                    showFiles = true
-                }
-                
-                ActionButton(icon: "dumbbell.fill", label: "Skills") {
-                    showSkills = true
-                }
-                
-                ActionButton(icon: "message.fill", label: "Chat") {
-                    showChat = true
+
+                ActionButton(icon: .connections, label: "Connections") {
+                    activeSheet = .connections
                 }
             }
+
+            HStack(spacing: 12) {
+                ActionButton(icon: .files, label: "Files") {
+                    activeSheet = .files
+                }
+
+                ActionButton(icon: .skills, label: "Skills") {
+                    activeSheet = .skills
+                }
+
+                ActionButton(icon: .channels, label: "Channels") {
+                    activeSheet = .channels
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func destination(for sheet: HomeSheet) -> some View {
+        switch sheet {
+        case .files:
+            FilesSheetView()
+        case .skills:
+            SkillsSheetView()
+        case .connections:
+            ConnectionsSheetView()
+        case .cron:
+            CronJobsSheetView()
+        case .channels:
+            ContactLinksSheetView()
+        case .settings:
+            SettingsView()
         }
     }
 }

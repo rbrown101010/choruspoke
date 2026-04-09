@@ -1,35 +1,61 @@
 import UIKit
 
 enum Haptics {
+    private static let mediumImpact = UIImpactFeedbackGenerator(style: .medium)
+    private static let lightImpact = UIImpactFeedbackGenerator(style: .light)
+    private static let heavyImpact = UIImpactFeedbackGenerator(style: .heavy)
+    private static let rigidImpact = UIImpactFeedbackGenerator(style: .rigid)
+    private static let softImpact = UIImpactFeedbackGenerator(style: .soft)
+    private static let selectionGenerator = UISelectionFeedbackGenerator()
+    private static let notificationGenerator = UINotificationFeedbackGenerator()
+
     static func tap() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        mediumImpact.prepare()
+        mediumImpact.impactOccurred()
     }
-    
+
     static func lightTap() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        lightImpact.prepare()
+        lightImpact.impactOccurred()
     }
-    
+
     static func heavyTap() {
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        heavyImpact.prepare()
+        heavyImpact.impactOccurred()
     }
-    
+
     static func selection() {
-        UISelectionFeedbackGenerator().selectionChanged()
+        selectionGenerator.prepare()
+        selectionGenerator.selectionChanged()
     }
-    
+
+    static func carouselSnap() {
+        rigidImpact.prepare()
+        rigidImpact.impactOccurred(intensity: 0.94)
+    }
+
     static func success() {
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        notificationGenerator.prepare()
+        notificationGenerator.notificationOccurred(.success)
     }
-    
+
     static func sheetOpen() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred(intensity: 0.7)
+        mediumImpact.prepare()
+        mediumImpact.impactOccurred(intensity: 0.72)
     }
-    
+
     static func buttonPress() {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.6)
+        rigidImpact.prepare()
+        rigidImpact.impactOccurred(intensity: 0.66)
     }
-    
+
+    static func mainButton() {
+        heavyImpact.prepare()
+        heavyImpact.impactOccurred(intensity: 0.92)
+    }
+
     static func navigate() {
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.8)
+        softImpact.prepare()
+        softImpact.impactOccurred(intensity: 0.8)
     }
 }
