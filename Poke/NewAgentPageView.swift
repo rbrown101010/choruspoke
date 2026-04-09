@@ -6,8 +6,45 @@ private struct NewAgentTemplate: Identifiable {
     let cardColors: [Color]
     let accent: Color
     let figureStyle: RunnerLissajousStyle
+    let supportsReadMore: Bool
+    let requiresCustomName: Bool
 
     static let all: [NewAgentTemplate] = [
+        NewAgentTemplate(
+            id: "custom",
+            title: "Create your own agent",
+            cardColors: [
+                Color(red: 0.16, green: 0.16, blue: 0.18),
+                Color(red: 0.24, green: 0.24, blue: 0.27),
+                Color(red: 0.32, green: 0.32, blue: 0.36),
+            ],
+            accent: Color(red: 0.78, green: 0.80, blue: 0.84),
+            figureStyle: RunnerLissajousStyle(
+                xFrequency: 3,
+                yFrequency: 2,
+                phaseShift: .pi / 2.1,
+                drift: 0.88,
+                amplitudeX: 0.40,
+                amplitudeY: 0.33,
+                rotation: .degrees(0),
+                glowColors: [
+                    Color.white.opacity(0.09),
+                    Color.white.opacity(0.26),
+                    Color(red: 0.90, green: 0.91, blue: 0.94).opacity(0.52),
+                    Color(red: 0.76, green: 0.78, blue: 0.83).opacity(0.22),
+                ],
+                strokeColors: [
+                    Color(red: 0.72, green: 0.74, blue: 0.79).opacity(0.48),
+                    Color(red: 0.84, green: 0.85, blue: 0.89).opacity(0.86),
+                    Color.white.opacity(0.92),
+                    Color(red: 0.66, green: 0.68, blue: 0.73).opacity(0.62),
+                ],
+                glowLineWidth: 16,
+                strokeLineWidth: 3.5
+            ),
+            supportsReadMore: false,
+            requiresCustomName: true
+        ),
         NewAgentTemplate(
             id: "ios-developer",
             title: "iOS Developer Agent",
@@ -39,7 +76,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 16,
                 strokeLineWidth: 3.6
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "web-developer",
@@ -72,7 +111,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 17,
                 strokeLineWidth: 3.2
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "youtube",
@@ -105,7 +146,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 15,
                 strokeLineWidth: 3.4
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "marketing",
@@ -139,7 +182,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 14,
                 strokeLineWidth: 2.9
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "executive-assistant",
@@ -172,7 +217,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 16,
                 strokeLineWidth: 3.3
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "sales",
@@ -206,7 +253,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 14,
                 strokeLineWidth: 3.0
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "design",
@@ -240,7 +289,9 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 14,
                 strokeLineWidth: 3.0
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
         NewAgentTemplate(
             id: "research",
@@ -274,12 +325,20 @@ private struct NewAgentTemplate: Identifiable {
                 ],
                 glowLineWidth: 14,
                 strokeLineWidth: 2.9
-            )
+            ),
+            supportsReadMore: true,
+            requiresCustomName: false
         ),
     ]
 
     var detailParagraphs: [String] {
         switch id {
+        case "custom":
+            return [
+                "Create your own agent gives you a blank naming pass first, then routes into the same sandbox provisioning flow as the prebuilt templates.",
+                "Use it when you want the agent to enter your list with your own title instead of a preset role name. You can differentiate the deeper behavior later without changing the creation path today.",
+                "It is the fastest route to a real agent when you know the name you want and do not need a prewritten template story on this screen.",
+            ]
         case "ios-developer":
             return [
                 "The iOS Developer Agent is built for product teams shipping native Apple experiences. It focuses on SwiftUI implementation, app architecture, debugging loops, and the kind of quality-control work that keeps releases stable.",
@@ -339,14 +398,22 @@ private struct NewAgentTemplate: Identifiable {
 }
 
 struct NewAgentPageView: View {
+    @EnvironmentObject private var appModel: RunnerAppModel
     @Environment(\.dismiss) private var dismiss
     @Namespace private var cardTransition
     @State private var selectedTemplateID: String? = NewAgentTemplate.all.first?.id
     @State private var readMoreReadyTemplateID: String? = NewAgentTemplate.all.first?.id
+    @State private var customNamingTemplate: NewAgentTemplate?
     @State private var provisioningTemplate: NewAgentTemplate?
     @State private var detailTemplate: NewAgentTemplate?
     @State private var launchTask: Task<Void, Never>?
     @State private var settleTask: Task<Void, Never>?
+    @State private var agentCreationTask: Task<Void, Never>?
+    @State private var creationError: String?
+    @State private var customAgentName = ""
+    @State private var provisioningTitle = ""
+    @State private var isAgentCreationFinished = false
+    @State private var pendingProvisioningDismiss = false
 
     private let templates = NewAgentTemplate.all
 
@@ -373,10 +440,16 @@ struct NewAgentPageView: View {
                 hero
                     .offset(y: -56)
 
+                if let creationError {
+                    RunnerInlineNotice(text: creationError)
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 14)
+                }
+
                 carouselSection
                     .padding(.bottom, 24)
             }
-            .allowsHitTesting(provisioningTemplate == nil && detailTemplate == nil)
+            .allowsHitTesting(provisioningTemplate == nil && detailTemplate == nil && customNamingTemplate == nil)
 
             if let detailTemplate {
                 NewAgentDetailOverlay(
@@ -391,15 +464,27 @@ struct NewAgentPageView: View {
                 .zIndex(6)
             }
 
-            if let provisioningTemplate {
-                NewAgentProvisioningView(template: provisioningTemplate) {
-                    withAnimation(.easeInOut(duration: 0.26)) {
-                        self.provisioningTemplate = nil
+            if let customNamingTemplate {
+                NewCustomAgentSetupView(
+                    template: customNamingTemplate,
+                    agentName: $customAgentName
+                ) {
+                    Haptics.navigate()
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                        self.customNamingTemplate = nil
                     }
+                } onContinue: {
+                    confirmCustomAgentCreation(for: customNamingTemplate)
+                }
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .zIndex(8)
+            }
 
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .milliseconds(260))
-                        dismiss()
+            if let provisioningTemplate {
+                NewAgentProvisioningView(template: provisioningTemplate, title: provisioningTitle) {
+                    pendingProvisioningDismiss = true
+                    if isAgentCreationFinished {
+                        dismissProvisioningFlow()
                     }
                 }
                 .transition(.opacity)
@@ -409,13 +494,14 @@ struct NewAgentPageView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: selectedTemplateID) { _, _ in
-            guard provisioningTemplate == nil else { return }
+            guard provisioningTemplate == nil, customNamingTemplate == nil else { return }
             Haptics.carouselSnap()
             scheduleReadMoreUnlock()
         }
         .onDisappear {
             launchTask?.cancel()
             settleTask?.cancel()
+            agentCreationTask?.cancel()
         }
     }
 
@@ -536,14 +622,72 @@ struct NewAgentPageView: View {
     }
 
     private func beginProvisioning(for template: NewAgentTemplate) {
-        guard provisioningTemplate == nil, detailTemplate == nil else { return }
+        guard provisioningTemplate == nil, detailTemplate == nil, customNamingTemplate == nil else { return }
         launchTask?.cancel()
         settleTask?.cancel()
+        agentCreationTask?.cancel()
+
+        creationError = nil
+        pendingProvisioningDismiss = false
+        isAgentCreationFinished = false
 
         Haptics.mainButton()
 
         withAnimation(.interactiveSpring(response: 0.36, dampingFraction: 0.82, blendDuration: 0.14)) {
             selectedTemplateID = template.id
+        }
+
+        if template.requiresCustomName {
+            customAgentName = ""
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                customNamingTemplate = template
+            }
+            return
+        }
+
+        startProvisioning(for: template, agentName: template.title)
+    }
+
+    private func confirmCustomAgentCreation(for template: NewAgentTemplate) {
+        let trimmedName = customAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else { return }
+
+        Haptics.mainButton()
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) {
+            customNamingTemplate = nil
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard customNamingTemplate == nil else { return }
+            startProvisioning(for: template, agentName: trimmedName)
+        }
+    }
+
+    private func startProvisioning(for template: NewAgentTemplate, agentName: String) {
+        provisioningTitle = agentName
+
+        agentCreationTask = Task { @MainActor in
+            do {
+                _ = try await appModel.createAgent(name: agentName)
+                guard !Task.isCancelled else { return }
+
+                isAgentCreationFinished = true
+                if pendingProvisioningDismiss {
+                    dismissProvisioningFlow()
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+
+                creationError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                isAgentCreationFinished = true
+                launchTask?.cancel()
+
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    provisioningTemplate = nil
+                }
+            }
         }
 
         launchTask = Task { @MainActor in
@@ -556,8 +700,21 @@ struct NewAgentPageView: View {
         }
     }
 
+    @MainActor
+    private func dismissProvisioningFlow() {
+        withAnimation(.easeInOut(duration: 0.26)) {
+            provisioningTemplate = nil
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(260))
+            dismiss()
+        }
+    }
+
     private func showDetail(for template: NewAgentTemplate) {
-        guard provisioningTemplate == nil, detailTemplate == nil else { return }
+        guard template.supportsReadMore else { return }
+        guard provisioningTemplate == nil, detailTemplate == nil, customNamingTemplate == nil else { return }
         launchTask?.cancel()
         settleTask?.cancel()
         Haptics.navigate()
@@ -659,7 +816,7 @@ private struct NewAgentTemplateCard: View {
                 .offset(y: 28)
         }
         .overlay(alignment: .topTrailing) {
-            if showReadMore && !isHiddenForDetail {
+            if template.supportsReadMore && showReadMore && !isHiddenForDetail {
                 Button(action: onReadMore) {
                     Text("Read More")
                         .font(RunnerTypography.sans(11.5, weight: .semibold))
@@ -690,13 +847,23 @@ private struct NewAgentDetailOverlay: View {
 
     @State private var contentVisible = false
     @State private var panelTilt = -10.0
+    @State private var dragOffset: CGFloat = 0
+
+    private var dismissProgress: CGFloat {
+        min(max(dragOffset / 260, 0), 1)
+    }
+
+    private var overlayOpacity: Double {
+        let baseOpacity = contentVisible ? 0.52 : 0.0
+        return baseOpacity * (1 - (Double(dismissProgress) * 0.82))
+    }
 
     var body: some View {
         ZStack {
             RunnerBackgroundView()
                 .ignoresSafeArea()
 
-            Color.black.opacity(contentVisible ? 0.52 : 0.0)
+            Color.black.opacity(overlayOpacity)
                 .ignoresSafeArea()
                 .onTapGesture {
                     dismiss()
@@ -796,6 +963,9 @@ private struct NewAgentDetailOverlay: View {
                 }
                 .opacity(contentVisible ? 1 : 0)
             }
+            .offset(y: dragOffset)
+            .scaleEffect(1 - (dismissProgress * 0.06), anchor: .top)
+            .simultaneousGesture(pullToDismissGesture)
         }
         .task {
             withAnimation(.spring(response: 0.46, dampingFraction: 0.88)) {
@@ -811,6 +981,7 @@ private struct NewAgentDetailOverlay: View {
         withAnimation(.easeInOut(duration: 0.22)) {
             contentVisible = false
             panelTilt = -8
+            dragOffset = 0
         }
 
         Task { @MainActor in
@@ -818,10 +989,184 @@ private struct NewAgentDetailOverlay: View {
             onClose()
         }
     }
+
+    private var pullToDismissGesture: some Gesture {
+        DragGesture(minimumDistance: 4)
+            .onChanged { value in
+                guard contentVisible else { return }
+                guard value.translation.height > 0 else { return }
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                guard contentVisible else { return }
+                let travel = max(value.translation.height, 0)
+                let projected = max(value.predictedEndTranslation.height, 0)
+
+                if travel > 110 || projected > 180 {
+                    dismiss()
+                } else {
+                    withAnimation(.interactiveSpring(response: 0.34, dampingFraction: 0.82)) {
+                        dragOffset = 0
+                    }
+                }
+            }
+    }
+}
+
+private struct NewCustomAgentSetupView: View {
+    let template: NewAgentTemplate
+    @Binding var agentName: String
+    let onClose: () -> Void
+    let onContinue: () -> Void
+
+    @FocusState private var nameFieldFocused: Bool
+    private let minimumNameLength = 3
+
+    private var trimmedName: String {
+        agentName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canContinue: Bool {
+        trimmedName.count >= minimumNameLength
+    }
+
+    private var clampedNameBinding: Binding<String> {
+        Binding(
+            get: { agentName },
+            set: { newValue in
+                agentName = String(newValue.prefix(100))
+            }
+        )
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let topInset = proxy.safeAreaInsets.top
+            let bottomInset = max(proxy.safeAreaInsets.bottom, 16)
+            let contentTopPadding = topInset + 84
+
+            ZStack {
+                RunnerBackgroundView()
+                    .ignoresSafeArea()
+
+                Color.black.opacity(0.32)
+                    .ignoresSafeArea()
+
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 22) {
+                        VStack(spacing: 0) {
+                            RunnerLissajousView(style: template.figureStyle)
+                                .frame(width: 300, height: 196)
+                                .padding(.bottom, 6)
+
+                            Text("Give your agent a name")
+                                .font(RunnerTypography.sans(30, weight: .semibold))
+                                .foregroundStyle(RunnerTheme.primaryText)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 20)
+                        }
+
+                        VStack(alignment: .leading, spacing: 18) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                TextField("iOS Developer Agent", text: clampedNameBinding)
+                                    .font(RunnerTypography.sans(17, weight: .medium))
+                                    .foregroundStyle(RunnerTheme.primaryText)
+                                    .textInputAutocapitalization(.words)
+                                    .autocorrectionDisabled()
+                                    .submitLabel(.done)
+                                    .focused($nameFieldFocused)
+                                    .padding(.vertical, 12)
+                                    .onSubmit {
+                                        guard canContinue else { return }
+                                        onContinue()
+                                    }
+
+                                Rectangle()
+                                    .fill(
+                                        nameFieldFocused
+                                            ? AnyShapeStyle(
+                                                LinearGradient(
+                                                    colors: [RunnerTheme.accentBlue, template.accent],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                            : AnyShapeStyle(RunnerTheme.borderStrong)
+                                    )
+                                    .frame(height: nameFieldFocused ? 2.5 : 1)
+                                    .animation(.easeInOut(duration: 0.18), value: nameFieldFocused)
+                            }
+
+                            Button(action: onContinue) {
+                                Text("Enter")
+                                    .font(RunnerTypography.sans(16, weight: .semibold))
+                                    .foregroundStyle(canContinue ? Color.white : RunnerTheme.secondaryText)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 17)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(
+                                                LinearGradient(
+                                                    colors: canContinue
+                                                        ? [RunnerTheme.accentBlue, template.accent]
+                                                        : [RunnerTheme.surface, RunnerTheme.surface],
+                                                    startPoint: .leading,
+                                                    endPoint: .trailing
+                                                )
+                                            )
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .stroke(
+                                                canContinue ? Color.white.opacity(0.12) : RunnerTheme.borderStrong,
+                                                lineWidth: 1
+                                            )
+                                    )
+                            }
+                            .buttonStyle(ScaleButtonStyle())
+                            .disabled(!canContinue)
+                            .animation(.easeInOut(duration: 0.18), value: canContinue)
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, contentTopPadding)
+                    .padding(.bottom, bottomInset + 20)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .overlay(alignment: .topLeading) {
+                    Button(action: onClose) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(RunnerTheme.primaryText)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(RunnerTheme.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(RunnerTheme.borderStrong, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(ScaleButtonStyle())
+                    .padding(.leading, 20)
+                    .padding(.top, topInset + 12)
+                }
+            }
+        }
+        .task {
+            try? await Task.sleep(for: .milliseconds(260))
+            guard !Task.isCancelled else { return }
+            nameFieldFocused = true
+        }
+    }
 }
 
 private struct NewAgentProvisioningView: View {
     let template: NewAgentTemplate
+    let title: String
     let onComplete: () -> Void
 
     @State private var currentStep = 0
@@ -896,7 +1241,7 @@ private struct NewAgentProvisioningView: View {
                     .opacity(contentOpacity)
                     .animation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true), value: pulse)
 
-                Text(template.title)
+                Text(title)
                     .font(RunnerTypography.sans(26, weight: .semibold))
                     .foregroundStyle(RunnerTheme.primaryText)
                     .multilineTextAlignment(.center)
@@ -905,21 +1250,25 @@ private struct NewAgentProvisioningView: View {
                     .padding(.top, 8)
                     .opacity(contentOpacity)
 
-                VStack(spacing: 14) {
+                VStack(spacing: 0) {
                     ProvisioningLoadingStrip(items: loadingItems, speed: 26)
                         .opacity(contentOpacity * 0.82)
+                        .padding(.horizontal, 6)
 
-                    loadingBar
+                    VStack(spacing: 14) {
+                        loadingBar
 
-                    Text(steps[currentStep])
-                        .id(currentStep)
-                        .font(RunnerTypography.sans(18, weight: .medium))
-                        .foregroundStyle(RunnerTheme.secondaryText)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        Text(steps[currentStep])
+                            .id(currentStep)
+                            .font(RunnerTypography.sans(18, weight: .medium))
+                            .foregroundStyle(RunnerTheme.secondaryText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 32)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    }
+                    .padding(.top, 28)
                 }
-                .padding(.top, 10)
+                .padding(.top, 14)
 
                 Spacer(minLength: 86)
             }
@@ -1026,8 +1375,8 @@ private struct ProvisioningLoadingStrip: View {
     @State private var settledOffset: CGFloat = 0
     @State private var dragOffset: CGFloat = 0
 
-    private let spacing: CGFloat = 12
-    private let rowHeight: CGFloat = 58
+    private let spacing: CGFloat = 14
+    private let rowHeight: CGFloat = 68
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
@@ -1070,9 +1419,9 @@ private struct ProvisioningLoadingStrip: View {
     private func tileWidth(for item: ProvisioningLoadingItem) -> CGFloat {
         switch item.kind {
         case .file:
-            return min(max(CGFloat(item.label.count) * 7.2 + 34, 96), 118)
+            return min(max(CGFloat(item.label.count) * 7.3 + 40, 104), 132)
         case .folder:
-            return min(max(CGFloat(item.label.count) * 7.6 + 42, 106), 132)
+            return min(max(CGFloat(item.label.count) * 7.4 + 44, 112), 138)
         }
     }
 
@@ -1113,82 +1462,63 @@ private struct ProvisioningChip: View {
 
     private var fileTile: some View {
         ZStack(alignment: .bottomLeading) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.07),
-                            Color.white.opacity(0.035),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                )
+            tileSurface(cornerRadius: 18)
 
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .frame(height: 18)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+                .frame(width: 54, height: 18)
                 .blur(radius: 12)
-                .offset(y: -18)
+                .offset(x: 10, y: -24)
 
             Text(item.label)
-                .font(RunnerTypography.sans(10.5, weight: .medium))
-                .foregroundStyle(RunnerTheme.secondaryText.opacity(0.86))
+                .font(RunnerTypography.sans(11.5, weight: .medium))
+                .foregroundStyle(RunnerTheme.secondaryText.opacity(0.88))
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
                 .frame(maxWidth: .infinity, alignment: .bottomLeading)
         }
-        .shadow(color: Color.black.opacity(0.14), radius: 12, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.16), radius: 16, x: 0, y: 10)
     }
 
     private var folderTile: some View {
-        ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.92, green: 0.79, blue: 0.50).opacity(0.16),
-                            Color(red: 0.78, green: 0.63, blue: 0.34).opacity(0.12),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(height: 42)
-                .offset(y: 14)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color(red: 0.96, green: 0.84, blue: 0.58).opacity(0.18), lineWidth: 1)
-                        .frame(height: 42)
-                        .offset(y: 14)
-                )
+        ZStack(alignment: .bottomLeading) {
+            tileSurface(cornerRadius: 14)
 
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color(red: 0.96, green: 0.84, blue: 0.58).opacity(0.19))
-                .frame(width: 40, height: 16)
-                .offset(x: 14, y: 6)
-
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.05))
-                .frame(width: 72, height: 12)
-                .blur(radius: 8)
-                .offset(x: 20, y: 12)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+                .frame(width: 48, height: 16)
+                .blur(radius: 10)
+                .offset(x: 10, y: -22)
 
             Text(item.label)
-                .font(RunnerTypography.sans(10.5, weight: .medium))
-                .foregroundStyle(Color(red: 0.98, green: 0.90, blue: 0.72).opacity(0.88))
+                .font(RunnerTypography.sans(11.5, weight: .medium))
+                .foregroundStyle(RunnerTheme.secondaryText.opacity(0.88))
                 .multilineTextAlignment(.leading)
                 .lineLimit(2)
-                .padding(.horizontal, 12)
-                .padding(.top, 28)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+                .frame(maxWidth: .infinity, alignment: .bottomLeading)
         }
-        .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
+        .shadow(color: Color.black.opacity(0.16), radius: 16, x: 0, y: 10)
+    }
+
+    private func tileSurface(cornerRadius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.085),
+                        Color.white.opacity(0.035),
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.09), lineWidth: 1)
+            )
     }
 }

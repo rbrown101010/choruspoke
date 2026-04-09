@@ -1,30 +1,32 @@
 import SwiftUI
 
+private enum SettingsAction {
+    case google
+    case apple
+    case refresh
+    case signOut
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var appModel: RunnerAppModel
     @Environment(\.dismiss) private var dismiss
 
-    @State private var draftURL = ""
-    @State private var draftToken = ""
-    @State private var helperMessage: String?
-    @State private var isResolvingToken = false
-    @State private var isConnecting = false
+    @State private var actionInFlight: SettingsAction?
 
     var body: some View {
-        RunnerPanel(title: "Settings") {
+        RunnerPanel(title: "Menu") {
             ScrollView {
                 VStack(spacing: 18) {
                     profileCard
-                    connectionCard
-                    helperCard
+                    accountCard
+                    if appModel.isSignedIn {
+                        agentCard
+                    }
+                    environmentCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 28)
             }
-        }
-        .task {
-            draftURL = appModel.config.baseURL
-            draftToken = appModel.config.token
         }
     }
 
@@ -40,22 +42,22 @@ struct SettingsView: View {
                 )
                 .frame(width: 76, height: 76)
                 .overlay(
-                    Text("R")
-                        .font(.system(size: 28, weight: .bold))
+                    Text(initials)
+                        .font(.system(size: 26, weight: .bold))
                         .foregroundStyle(.white)
                 )
 
-            Text("Chorus Companion")
-                .font(.system(size: 22, weight: .semibold))
+            Text(appModel.authenticatedUser?.displayName ?? "Chorus Companion")
+                .font(RunnerTypography.sans(22, weight: .semibold))
                 .foregroundStyle(RunnerTheme.primaryText)
 
             VStack(spacing: 3) {
-                Text(appModel.connectionStatus.label)
-                    .font(.system(size: 13, weight: .semibold))
+                Text(appModel.authenticatedUser?.emailAddress ?? "Sign in with Clerk to load your agents")
+                    .font(RunnerTypography.sans(13, weight: .semibold))
                     .foregroundStyle(RunnerTheme.secondaryText)
 
-                Text(appModel.config.hostLabel)
-                    .font(.system(size: 12, weight: .medium))
+                Text(statusLine)
+                    .font(RunnerTypography.sans(12, weight: .medium))
                     .foregroundStyle(RunnerTheme.tertiaryText)
             }
         }
@@ -64,53 +66,60 @@ struct SettingsView: View {
         .runnerCard()
     }
 
-    private var connectionCard: some View {
+    private var accountCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Connection")
+            Text(appModel.isSignedIn ? "Account" : "Sign In")
                 .font(RunnerTypography.sans(15, weight: .semibold))
                 .foregroundStyle(RunnerTheme.primaryText)
 
-            field(title: "Server URL", text: $draftURL, placeholder: "http://localhost")
-            field(title: "Access token", text: $draftToken, placeholder: "Optional if dev-token is enabled")
-
-            if let message = helperMessage {
-                Text(message)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(RunnerTheme.secondaryText)
+            if let message = appModel.authMessage {
+                RunnerInlineNotice(text: message)
             }
 
-            VStack(spacing: 10) {
-                Button {
-                    draftURL = RunnerConnectionConfig.defaultLocal.baseURL
-                    draftToken = ""
-                    helperMessage = "Local simulator preset loaded."
-                } label: {
-                    settingsButtonLabel(title: "Use local dev preset", icon: "bolt.fill", fill: RunnerTheme.surface)
-                }
-                .buttonStyle(ScaleButtonStyle())
+            if let message = appModel.agentsLoadError {
+                RunnerInlineNotice(text: message)
+            }
 
+            if appModel.isSignedIn {
                 Button {
-                    Task {
-                        await fetchDevToken()
-                    }
+                    Task { await run(.refresh) { await appModel.refreshAgentsAndReconnect() } }
                 } label: {
                     settingsButtonLabel(
-                        title: isResolvingToken ? "Fetching dev token…" : "Fetch dev token",
-                        icon: "key.fill",
+                        title: actionInFlight == .refresh ? "Refreshing…" : "Refresh Agents",
+                        icon: "arrow.clockwise",
                         fill: RunnerTheme.elevated
                     )
                 }
                 .buttonStyle(ScaleButtonStyle())
-                .disabled(isResolvingToken)
+                .disabled(actionInFlight != nil)
 
                 Button {
                     Task {
-                        await connect()
+                        await run(.signOut) {
+                            await appModel.signOut()
+                        }
+                        dismiss()
                     }
                 } label: {
                     settingsButtonLabel(
-                        title: isConnecting ? "Connecting…" : "Connect to runner",
-                        icon: "arrow.triangle.2.circlepath",
+                        title: actionInFlight == .signOut ? "Signing Out…" : "Sign Out",
+                        icon: "rectangle.portrait.and.arrow.right",
+                        fill: RunnerTheme.surface
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .disabled(actionInFlight != nil)
+            } else {
+                Button {
+                    Task {
+                        await run(.google) {
+                            await appModel.signInWithGoogle()
+                        }
+                    }
+                } label: {
+                    settingsButtonLabel(
+                        title: actionInFlight == .google ? "Connecting Google…" : "Continue with Google",
+                        icon: "globe",
                         fill: LinearGradient(
                             colors: [RunnerTheme.accentBlue, RunnerTheme.accent],
                             startPoint: .leading,
@@ -119,58 +128,119 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(ScaleButtonStyle())
-                .disabled(isConnecting)
+                .disabled(actionInFlight != nil)
+
+                Button {
+                    Task {
+                        await run(.apple) {
+                            await appModel.signInWithApple()
+                        }
+                    }
+                } label: {
+                    settingsButtonLabel(
+                        title: actionInFlight == .apple ? "Connecting Apple…" : "Continue with Apple",
+                        icon: "apple.logo",
+                        fill: RunnerTheme.surface
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .disabled(actionInFlight != nil)
             }
+        }
+        .padding(18)
+        .runnerCard()
+    }
+
+    private var agentCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Current Agent")
+                .font(RunnerTypography.sans(15, weight: .semibold))
+                .foregroundStyle(RunnerTheme.primaryText)
+
+            if let agent = appModel.selectedAgent {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(agent.name)
+                                .font(RunnerTypography.sans(17, weight: .semibold))
+                                .foregroundStyle(RunnerTheme.primaryText)
+
+                            Text(agent.detailLine)
+                                .font(RunnerTypography.sans(13, weight: .medium))
+                                .foregroundStyle(RunnerTheme.secondaryText)
+                                .lineLimit(2)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Text(agent.statusLabel)
+                            .font(RunnerTypography.sans(11, weight: .bold))
+                            .foregroundStyle(RunnerTheme.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(RunnerTheme.accent.opacity(0.14)))
+                            .overlay(Capsule().stroke(RunnerTheme.accent.opacity(0.2), lineWidth: 1))
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        infoRow(title: "Runner host", value: appModel.currentRunnerHostLabel)
+                        infoRow(title: "Connection", value: appModel.connectionStatus.label)
+                    }
+                }
+                .padding(16)
+                .runnerCard()
+            } else {
+                RunnerEmptyState(
+                    icon: "desktopcomputer.trianglebadge.exclamationmark",
+                    title: "No selected agent",
+                    message: "Pick one from the home screen selector once your account loads."
+                )
+            }
+        }
+        .padding(18)
+        .runnerCard()
+    }
+
+    private var environmentCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Environment")
+                .font(RunnerTypography.sans(15, weight: .semibold))
+                .foregroundStyle(RunnerTheme.primaryText)
+
+            infoRow(title: "Agents backend", value: appModel.backendHostLabel)
 
             if let connectedAt = appModel.config.lastConnectedAt {
-                Text("Last connected: \(RunnerDate.shortDateTime.string(from: connectedAt))")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(RunnerTheme.tertiaryText)
+                infoRow(title: "Last connected", value: RunnerDate.shortDateTime.string(from: connectedAt))
+            }
+
+            if let message = appModel.connectionStatus.errorMessage {
+                RunnerInlineNotice(text: message)
             }
         }
         .padding(18)
         .runnerCard()
     }
 
-    private var helperCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Notes")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(RunnerTheme.primaryText)
-
-            Text("On the iOS simulator, `http://localhost` should work. On a physical iPhone, replace `localhost` with your Mac’s LAN IP or hostname so the phone can reach your runner host.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(RunnerTheme.secondaryText)
-
-            Text("If the access token field is empty, the app will try `/api/v1/auth/dev-token` first.")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(RunnerTheme.secondaryText)
+    private var initials: String {
+        if let displayName = appModel.authenticatedUser?.displayName.nilIfEmpty {
+            let pieces = displayName.split(separator: " ").prefix(2)
+            let text = pieces.compactMap { $0.first }.map(String.init).joined()
+            return text.isEmpty ? "C" : text.uppercased()
         }
-        .padding(18)
-        .runnerCard()
+
+        return "C"
     }
 
-    private func field(title: String, text: Binding<String>, placeholder: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(RunnerTheme.secondaryText)
-
-            TextField(placeholder, text: text)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(RunnerTheme.primaryText)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(RunnerTheme.elevated)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(RunnerTheme.border, lineWidth: 1)
-                )
+    private var statusLine: String {
+        switch appModel.authState {
+        case .loading:
+            return "Loading session"
+        case .signedOut:
+            return "Signed out"
+        case .signedIn:
+            return appModel.agentStatusLine
+        case .failed(let message):
+            return message
         }
     }
 
@@ -195,28 +265,28 @@ struct SettingsView: View {
         )
     }
 
-    private func fetchDevToken() async {
-        isResolvingToken = true
-        defer { isResolvingToken = false }
+    private func infoRow(title: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(title)
+                .font(RunnerTypography.sans(12, weight: .semibold))
+                .foregroundStyle(RunnerTheme.tertiaryText)
+                .frame(width: 92, alignment: .leading)
 
-        do {
-            let token = try await appModel.fetchDevToken(for: draftURL)
-            draftToken = token
-            helperMessage = "Fetched the local dev token."
-        } catch {
-            helperMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            Text(value)
+                .font(RunnerTypography.sans(13, weight: .medium))
+                .foregroundStyle(RunnerTheme.primaryText)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
         }
     }
 
-    private func connect() async {
-        isConnecting = true
-        defer { isConnecting = false }
+    private func run(_ action: SettingsAction, operation: @escaping @MainActor () async -> Void) async {
+        actionInFlight = action
+        await operation()
+        actionInFlight = nil
 
-        await appModel.updateConnection(baseURL: draftURL, token: draftToken)
-        helperMessage = appModel.connectionStatus.errorMessage ?? "Runner connection updated."
-
-        if appModel.connectionStatus.isConnected {
-            Haptics.success()
+        if appModel.isSignedIn && (action == .google || action == .apple) {
             dismiss()
         }
     }

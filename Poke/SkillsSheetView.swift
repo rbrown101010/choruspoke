@@ -18,6 +18,10 @@ struct SkillsSheetView: View {
     @State private var isLoading = false
     @State private var error: String?
 
+    private var reloadKey: String {
+        "\(appModel.selectedAgentID ?? "none")::\(appModel.config.lastConnectedAt?.timeIntervalSince1970 ?? 0)"
+    }
+
     var body: some View {
         NavigationStack {
             RunnerPanel(title: "Skills") {
@@ -25,8 +29,8 @@ struct SkillsSheetView: View {
                     if appModel.client == nil {
                         RunnerEmptyState(
                             icon: "sparkles",
-                            title: "Connect to runner first",
-                            message: "Installed and marketplace skills load from the live runner workspace."
+                            title: "Choose an agent first",
+                            message: "Installed and marketplace skills load from the selected agent workspace."
                         )
                     } else if isLoading && installedSkills.isEmpty && marketplaceSkills.isEmpty {
                         ProgressView()
@@ -65,10 +69,16 @@ struct SkillsSheetView: View {
                 case .installed(let skill):
                     InstalledSkillDetailView(skill: skill)
                 case .marketplace(let skill):
-                    MarketplaceSkillDetailView(skill: skill)
+                    MarketplaceSkillDetailView(
+                        skill: skill,
+                        onInstalled: {
+                            selectedTab = .installed
+                            await load()
+                        }
+                    )
                 }
             }
-            .task {
+            .task(id: reloadKey) {
                 await load()
             }
         }
@@ -137,6 +147,10 @@ struct SkillsSheetView: View {
                     .foregroundStyle(RunnerTheme.primaryText)
                     .multilineTextAlignment(.leading)
 
+                Text(runnerSourceDisplayName(skill.source))
+                    .font(RunnerTypography.sans(12, weight: .semibold))
+                    .foregroundStyle(RunnerTheme.tertiaryText)
+
                 Text(skill.description)
                     .font(RunnerTypography.sans(13, weight: .medium))
                     .foregroundStyle(RunnerTheme.secondaryText)
@@ -144,21 +158,12 @@ struct SkillsSheetView: View {
                     .lineLimit(2)
 
                 HStack(spacing: 8) {
-                    RunnerSkillPill(title: runnerSourceDisplayName(skill.source), systemImage: "building.2")
-
                     if skill.setup.needsAttention {
                         RunnerSkillPill(
                             title: "Setup",
                             systemImage: "wrench.adjustable",
                             fill: RunnerTheme.statusWarning.opacity(0.18),
                             foreground: RunnerTheme.statusWarning
-                        )
-                    } else if skill.setup.ready {
-                        RunnerSkillPill(
-                            title: "Ready",
-                            systemImage: "checkmark",
-                            fill: RunnerTheme.accent.opacity(0.14),
-                            foreground: RunnerTheme.accent
                         )
                     }
 
@@ -231,7 +236,12 @@ struct SkillsSheetView: View {
     }
 
     private func load() async {
-        guard let client = appModel.client else { return }
+        guard let client = appModel.client else {
+            installedSkills = []
+            marketplaceSkills = []
+            error = nil
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }
@@ -322,13 +332,6 @@ private struct InstalledSkillDetailView: View {
                                 fill: RunnerTheme.statusWarning.opacity(0.18),
                                 foreground: RunnerTheme.statusWarning
                             )
-                        } else if skill.setup.ready {
-                            RunnerSkillPill(
-                                title: "Ready",
-                                systemImage: "checkmark",
-                                fill: RunnerTheme.accent.opacity(0.14),
-                                foreground: RunnerTheme.accent
-                            )
                         }
 
                         if skill.always {
@@ -366,8 +369,10 @@ private struct InstalledSkillDetailView: View {
 }
 
 private struct MarketplaceSkillDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var appModel: RunnerAppModel
     let skill: RunnerMarketplaceSkill
+    let onInstalled: () async -> Void
 
     @State private var content: String?
     @State private var detail: RunnerMarketplaceSkillDetail?
@@ -375,9 +380,13 @@ private struct MarketplaceSkillDetailView: View {
     @State private var installState: String?
     @State private var isLoading = false
     @State private var isInstalling = false
+    @State private var didInstall = false
+    @State private var isDescriptionExpanded = false
 
     var body: some View {
-        RunnerPanel(title: skill.displayName) {
+        ZStack {
+            RunnerBackgroundView()
+
             Group {
                 if isLoading && detail == nil && content == nil {
                     ProgressView()
@@ -386,63 +395,25 @@ private struct MarketplaceSkillDetailView: View {
                 } else {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
+                            topBar
+
                             if let installState {
                                 RunnerInlineNotice(text: installState)
                             }
 
-                            headerCard
+                            headerBlock
 
-                            Button {
-                                Task {
-                                    await install()
-                                }
-                            } label: {
-                                HStack {
-                                    if isInstalling {
-                                        ProgressView()
-                                            .tint(.white)
-                                    }
-
-                                    Text(isInstalling ? "Installing…" : "Install Skill")
-                                        .font(RunnerTypography.sans(14, weight: .bold))
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .fill(
-                                            LinearGradient(
-                                                colors: [RunnerTheme.accentBlue, RunnerTheme.blueHalo],
-                                                startPoint: .leading,
-                                                endPoint: .trailing
-                                            )
-                                        )
-                                )
-                            }
-                            .buttonStyle(ScaleButtonStyle())
-                            .disabled(isInstalling)
+                            Rectangle()
+                                .fill(RunnerTheme.border.opacity(0.7))
+                                .frame(height: 1)
 
                             if let content, !content.isEmpty {
-                                RunnerSkillSectionCard(title: "Skill File") {
-                                    RunnerMarkdownView(content: content)
-                                }
+                                RunnerMarkdownView(content: stripSkillFrontmatter(content))
                             } else {
-                                RunnerSkillSectionCard(title: "Overview") {
-                                    VStack(alignment: .leading, spacing: 14) {
-                                        Text(detail?.summary ?? skill.summary)
-                                            .font(RunnerTypography.sans(15, weight: .medium))
-                                            .foregroundStyle(RunnerTheme.primaryText)
-                                            .multilineTextAlignment(.leading)
-
-                                        if let dependencies = skill.dependencies, !dependencies.isEmpty {
-                                            HStack(spacing: 8) {
-                                                ForEach(dependencies.prefix(3), id: \.self) { dependency in
-                                                    RunnerSkillPill(title: dependency, systemImage: "link")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                Text(detail?.summary ?? skill.summary)
+                                    .font(RunnerTypography.sans(15, weight: .medium))
+                                    .foregroundStyle(RunnerTheme.primaryText)
+                                    .multilineTextAlignment(.leading)
                             }
 
                             if let loadNote {
@@ -451,46 +422,172 @@ private struct MarketplaceSkillDetailView: View {
                         }
                         .padding(.horizontal, 20)
                         .padding(.bottom, 28)
+                        .padding(.top, 26)
                     }
                 }
             }
         }
+        .navigationBarBackButtonHidden(true)
         .task {
             await load()
         }
     }
 
-    private var headerCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 14) {
+    private var topBar: some View {
+        HStack {
+            Button {
+                Haptics.tap()
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(RunnerTheme.primaryText)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(RunnerTheme.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(RunnerTheme.borderStrong, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(ScaleButtonStyle())
+
+            Spacer()
+        }
+    }
+
+    private var headerBlock: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
                 RunnerSkillArtworkView(
                     imageURL: appModel.client?.marketplaceIconURL(slug: skill.slug, source: skill.source),
                     fallbackSystemName: "puzzlepiece.extension",
-                    size: 58
+                    size: 52
                 )
 
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(skill.displayName)
+                        .font(RunnerTypography.sans(26, weight: .semibold))
+                        .foregroundStyle(RunnerTheme.primaryText)
+                        .multilineTextAlignment(.leading)
+
                     Text("by \(detail?.owner ?? skill.sourceDisplayName)")
                         .font(RunnerTypography.sans(12, weight: .semibold))
                         .foregroundStyle(RunnerTheme.tertiaryText)
 
-                    if let version = detail?.latestVersion ?? skill.latestVersion, !version.isEmpty {
+                    if let version = detail?.latestVersion ?? skill.latestVersion, !version.isEmpty, isDescriptionExpanded {
                         Text("v\(version)")
                             .font(RunnerTypography.sans(12, weight: .semibold))
                             .foregroundStyle(RunnerTheme.tertiaryText)
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 12)
+
+                Button {
+                    Task {
+                        await install()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if isInstalling {
+                            ProgressView()
+                                .tint(Color.black.opacity(0.72))
+                        }
+
+                        Text(installButtonTitle)
+                            .font(RunnerTypography.sans(13, weight: .bold))
+                    }
+                    .foregroundStyle(installButtonForeground)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 11)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(installButtonFill)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(installButtonBorder, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(ScaleButtonStyle())
+                .disabled(isInstalling || didInstall)
             }
 
-            Text(detail?.summary ?? skill.summary)
-                .font(RunnerTypography.sans(14, weight: .medium))
-                .foregroundStyle(RunnerTheme.secondaryText)
-                .multilineTextAlignment(.leading)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(displayedSummary)
+                    .font(RunnerTypography.sans(15, weight: .medium))
+                    .foregroundStyle(RunnerTheme.secondaryText)
+                    .multilineTextAlignment(.leading)
+
+                if summaryNeedsExpansion {
+                    Button(isDescriptionExpanded ? "Show Less" : "Expand") {
+                        Haptics.selection()
+                        withAnimation(.spring(duration: 0.22)) {
+                            isDescriptionExpanded.toggle()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .font(RunnerTypography.sans(12.5, weight: .semibold))
+                    .foregroundStyle(RunnerTheme.accentBlue)
+                }
+            }
         }
-        .padding(18)
-        .runnerCard()
+    }
+
+    private var installButtonTitle: String {
+        if didInstall {
+            return "Installed"
+        }
+
+        return isInstalling ? "Installing" : "Install Skill"
+    }
+
+    private var installButtonFill: LinearGradient {
+        if didInstall {
+            return LinearGradient(colors: [RunnerTheme.statusConnected, RunnerTheme.statusConnected.opacity(0.86)], startPoint: .leading, endPoint: .trailing)
+        }
+
+        if isInstalling {
+            return LinearGradient(colors: [Color.white.opacity(0.96), Color.white.opacity(0.88)], startPoint: .leading, endPoint: .trailing)
+        }
+
+        return LinearGradient(colors: [RunnerTheme.accentBlue, RunnerTheme.blueHalo], startPoint: .leading, endPoint: .trailing)
+    }
+
+    private var installButtonForeground: Color {
+        isInstalling ? Color.black.opacity(0.78) : .white
+    }
+
+    private var installButtonBorder: Color {
+        if didInstall {
+            return RunnerTheme.statusConnected.opacity(0.4)
+        }
+
+        if isInstalling {
+            return Color.white.opacity(0.22)
+        }
+
+        return RunnerTheme.accentBlue.opacity(0.3)
+    }
+
+    private var fullSummary: String {
+        detail?.summary ?? skill.summary
+    }
+
+    private var summaryNeedsExpansion: Bool {
+        fullSummary.count > 50
+    }
+
+    private var displayedSummary: String {
+        guard !isDescriptionExpanded, summaryNeedsExpansion else {
+            return fullSummary
+        }
+
+        let prefix = fullSummary.prefix(50)
+        return "\(prefix)…"
     }
 
     private func load() async {
@@ -524,8 +621,13 @@ private struct MarketplaceSkillDetailView: View {
 
         do {
             let result = try await client.installMarketplaceSkill(slug: skill.slug, source: skill.source)
-            installState = "Installed \(result.installedSkillKey ?? result.slug)."
+            didInstall = true
+            installState = nil
             Haptics.success()
+
+            try? await Task.sleep(for: .milliseconds(450))
+            await onInstalled()
+            dismiss()
         } catch {
             installState = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
@@ -650,4 +752,19 @@ private func runnerSourceDisplayName(_ source: String) -> String {
     default:
         return source.replacingOccurrences(of: "-", with: " ").capitalized
     }
+}
+
+private func stripSkillFrontmatter(_ markdown: String) -> String {
+    let normalized = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+
+    guard normalized.hasPrefix("---\n") else {
+        return normalized
+    }
+
+    let remainder = normalized.dropFirst(4)
+    guard let closingRange = remainder.range(of: "\n---\n") else {
+        return normalized
+    }
+
+    return String(remainder[closingRange.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
 }

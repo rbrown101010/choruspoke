@@ -120,51 +120,32 @@ struct RunnerFolderGlyph: View {
     var size: CGFloat = 54
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        ZStack {
             RoundedRectangle(cornerRadius: size * 0.16, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            Color(red: 0.42, green: 0.60, blue: 1.0),
-                            Color(red: 0.33, green: 0.51, blue: 0.96),
+                            Color(red: 0.43, green: 0.51, blue: 0.74),
+                            Color(red: 0.31, green: 0.38, blue: 0.61),
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
-                .frame(width: size, height: size * 0.68)
+                .frame(width: size, height: size * 0.74)
                 .overlay(
                     RoundedRectangle(cornerRadius: size * 0.16, style: .continuous)
-                        .stroke(Color.white.opacity(0.16), lineWidth: 0.8)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.9)
                 )
                 .shadow(color: Color.black.opacity(0.16), radius: 10, x: 0, y: 6)
-                .offset(y: size * 0.1)
 
             RoundedRectangle(cornerRadius: size * 0.12, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.53, green: 0.68, blue: 1.0),
-                            Color(red: 0.41, green: 0.57, blue: 1.0),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: size * 0.43, height: size * 0.22)
-                .overlay(
-                    RoundedRectangle(cornerRadius: size * 0.12, style: .continuous)
-                        .stroke(Color.white.opacity(0.12), lineWidth: 0.6)
-                )
-                .offset(x: size * 0.08, y: 0)
-
-            RoundedRectangle(cornerRadius: size * 0.12, style: .continuous)
-                .fill(Color.white.opacity(0.12))
-                .frame(width: size * 0.72, height: size * 0.05)
-                .blur(radius: 2)
-                .offset(x: size * 0.14, y: size * 0.22)
+                .fill(Color.white.opacity(0.06))
+                .frame(width: size * 0.56, height: size * 0.10)
+                .blur(radius: 5.5)
+                .offset(y: -size * 0.14)
         }
-        .frame(width: size, height: size * 0.85)
+        .frame(width: size, height: size * 0.78)
     }
 }
 

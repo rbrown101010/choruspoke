@@ -11,7 +11,9 @@ struct PokeApp: App {
             }
             .preferredColorScheme(.dark)
             .environmentObject(appModel)
+            .task {
+                await appModel.bootstrapApp()
+            }
         }
     }
 }
-

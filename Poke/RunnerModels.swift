@@ -36,6 +36,12 @@ struct RunnerConnectionConfig: Codable, Equatable {
     var token: String
     var lastConnectedAt: Date?
 
+    static let empty = RunnerConnectionConfig(
+        baseURL: "",
+        token: "",
+        lastConnectedAt: nil
+    )
+
     static let defaultLocal = RunnerConnectionConfig(
         baseURL: "http://localhost",
         token: "",
@@ -44,10 +50,6 @@ struct RunnerConnectionConfig: Codable, Equatable {
 
     var normalizedBaseURL: String {
         var value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if value.isEmpty {
-            value = Self.defaultLocal.baseURL
-        }
-
         while value.hasSuffix("/") {
             value.removeLast()
         }
@@ -64,6 +66,10 @@ struct RunnerConnectionConfig: Codable, Equatable {
     }
 
     var hostLabel: String {
+        guard !normalizedBaseURL.isEmpty else {
+            return "No runner selected"
+        }
+
         guard let url = URL(string: normalizedBaseURL) else {
             return normalizedBaseURL
         }
@@ -219,7 +225,7 @@ struct RunnerMarketplaceSkillDetail: Decodable {
     let source: String
     let moderation: String?
     let owner: String?
-    let latestVersion: String
+    let latestVersion: String?
 
     var sourceDisplayName: String {
         source == "chorus" ? "Chorus" : source.replacingOccurrences(of: "-", with: " ").capitalized
@@ -234,10 +240,20 @@ struct RunnerMarketplaceSkillFileResponse: Decodable {
 
 struct RunnerMarketplaceInstallResult: Decodable {
     let slug: String
-    let version: String
+    let version: String?
     let source: String
     let installedSkillKey: String?
     let installedDeps: [String]
+    let setup: RunnerSkillSetup?
+    let nextAction: RunnerMarketplaceNextAction?
+    let verification: String?
+}
+
+struct RunnerMarketplaceNextAction: Decodable {
+    let type: String?
+    let providerIds: [String]?
+    let actionId: String?
+    let url: String?
 }
 
 struct RunnerCronJobsResponse: Decodable {
@@ -320,9 +336,222 @@ enum RunnerConnectionStatus: Equatable {
     }
 }
 
+struct SandboxAgent: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let description: String?
+    let instructions: String?
+    let status: String
+    let previewUrl: String?
+    let masterclawUrl: String?
+    let createdAt: Date
+    let updatedAt: Date
+
+    var statusLabel: String {
+        switch status.uppercased() {
+        case "ACTIVE":
+            return "Ready"
+        case "AWAITING_READINESS":
+            return "Preparing"
+        case "FAILED":
+            return "Needs attention"
+        case "DELETING":
+            return "Deleting"
+        default:
+            return status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+
+    var isRunnable: Bool {
+        let value = status.uppercased()
+        return value == "ACTIVE" || value == "AWAITING_READINESS"
+    }
+
+    var detailLine: String {
+        if let description, !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return description
+        }
+
+        return "Your chorus.com agent"
+    }
+}
+
+struct AgentRunnerIframeURLResponse: Decodable {
+    let url: String
+    let expiresAt: Date?
+}
+
+struct RunnerBootstrapExchangeResponse: Decodable {
+    let token: String
+    let userId: String
+    let agentId: String
+    let expiresAt: Date
+}
+
+struct ChorusAuthenticatedUser: Equatable {
+    let id: String
+    let displayName: String
+    let emailAddress: String?
+}
+
+enum ChorusAuthState: Equatable {
+    case loading
+    case signedOut
+    case signedIn
+    case failed(String)
+
+    var isSignedIn: Bool {
+        if case .signedIn = self {
+            return true
+        }
+        return false
+    }
+}
+
+struct AgentConnectionRecord: Decodable, Identifiable, Hashable {
+    let id: String
+    let agentId: String
+    let integrationConnectionId: String
+    let provider: String
+    let createdAt: Date?
+    let connection: AgentConnectionDetails
+    let texting: AgentTextingDetails?
+    let coveredIntegrationIds: [String]?
+
+    var providerDisplayName: String {
+        provider.replacingOccurrences(of: "-", with: " ").capitalized
+    }
+}
+
+struct AgentConnectionDetails: Decodable, Hashable {
+    let id: String
+    let provider: String
+    let type: String?
+    let accountEmail: String?
+    let label: String?
+    let source: String?
+    let scopes: String?
+    let isActive: Bool?
+    let refreshExhausted: Bool?
+    let createdAt: Date?
+    let updatedAt: Date?
+}
+
+enum RunnerConnectionAuthType: String, Decodable, Hashable {
+    case oauth
+    case api_key
+    case nango
+    case manual
+}
+
+struct RunnerConnectionCatalogResponse: Decodable, Hashable {
+    let categories: [RunnerConnectionCategory]
+    let providers: [RunnerConnectionProvider]
+}
+
+struct RunnerConnectionCategory: Decodable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    let integrations: [RunnerConnectionIntegration]
+    let sharedProvider: String?
+}
+
+struct RunnerConnectionIntegration: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let icon: String
+    let description: String?
+    let providerId: String
+    let authType: RunnerConnectionAuthType
+    let categoryId: String
+    let requiredScopes: [String]?
+    let comingSoon: Bool?
+    let integrations: [RunnerConnectionIntegrationFeature]?
+}
+
+struct RunnerConnectionIntegrationFeature: Decodable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let requiredScopes: [String]?
+}
+
+struct RunnerConnectionProvider: Decodable, Identifiable, Hashable {
+    let id: String
+    let displayName: String
+    let authType: RunnerConnectionAuthType
+    let apiKeyConfig: RunnerConnectionAPIKeyConfig?
+    let nangoApiKeyHint: RunnerConnectionNangoHint?
+    let manualConfig: RunnerConnectionManualConfig?
+    let constraints: RunnerConnectionConstraints?
+    let envVar: String?
+}
+
+struct RunnerConnectionAPIKeyConfig: Decodable, Hashable {
+    let inputLabel: String
+    let placeholder: String?
+    let helpUrl: String?
+    let hasVerification: Bool
+}
+
+struct RunnerConnectionManualConfig: Decodable, Hashable {
+    let fields: [RunnerConnectionManualField]
+}
+
+struct RunnerConnectionManualField: Decodable, Hashable {
+    let key: String
+    let label: String
+    let placeholder: String?
+    let inputType: String?
+}
+
+struct RunnerConnectionConstraints: Decodable, Hashable {
+    let maxPerAgent: Int?
+    let uniqueAcrossAgents: Bool?
+    let maxPerUser: Int?
+}
+
+struct RunnerConnectionNangoHint: Decodable, Hashable {
+    let label: String
+    let description: String
+    let links: [RunnerConnectionNangoHintLink]
+}
+
+struct RunnerConnectionNangoHintLink: Decodable, Hashable {
+    let url: String
+    let label: String
+}
+
+struct RunnerConnectionOAuthAuthorizeResponse: Decodable {
+    let authUrl: String
+}
+
+struct RunnerConnectionMutationResponse: Decodable {
+    let success: Bool?
+}
+
+struct AgentTextingDetails: Decodable, Hashable {
+    let destinationE164: String?
+    let status: String?
+    let pendingReason: String?
+    let senderNumber: String?
+}
+
 extension String {
     var nilIfEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+extension AgentConnectionDetails: Identifiable {}
+
+extension AgentConnectionDetails {
+    func covers(requiredScopes: [String]?) -> Bool {
+        guard let requiredScopes, !requiredScopes.isEmpty else {
+            return true
+        }
+
+        let granted = Set((scopes ?? "").split(separator: " ").map(String.init))
+        return requiredScopes.allSatisfy(granted.contains)
     }
 }

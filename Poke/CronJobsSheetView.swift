@@ -6,14 +6,18 @@ struct CronJobsSheetView: View {
     @State private var isLoading = false
     @State private var error: String?
 
+    private var reloadKey: String {
+        "\(appModel.selectedAgentID ?? "none")::\(appModel.config.lastConnectedAt?.timeIntervalSince1970 ?? 0)"
+    }
+
     var body: some View {
         RunnerPanel(title: "Cron Jobs") {
             Group {
                 if appModel.client == nil {
                     RunnerEmptyState(
                         icon: "clock.arrow.circlepath",
-                        title: "Connect to runner first",
-                        message: "Cron jobs load from the live local stack."
+                        title: "Choose an agent first",
+                        message: "Cron jobs load from the selected agent."
                     )
                 } else if isLoading && jobs.isEmpty {
                     ProgressView()
@@ -44,13 +48,17 @@ struct CronJobsSheetView: View {
                 }
             }
         }
-        .task {
+        .task(id: reloadKey) {
             await load()
         }
     }
 
     private func load() async {
-        guard let client = appModel.client else { return }
+        guard let client = appModel.client else {
+            jobs = []
+            error = nil
+            return
+        }
 
         isLoading = true
         defer { isLoading = false }

@@ -18,6 +18,10 @@ struct FilesSheetView: View {
     @State private var isLoading = false
     @State private var error: String?
 
+    private var reloadKey: String {
+        "\(appModel.selectedAgentID ?? "none")::\(appModel.config.lastConnectedAt?.timeIntervalSince1970 ?? 0)"
+    }
+
     private let preferredPersonalityOrder = [
         "AGENTS.md",
         "BOOTSTRAP.md",
@@ -75,7 +79,7 @@ struct FilesSheetView: View {
                     FileContentView(path: path)
                 }
             }
-            .task {
+            .task(id: reloadKey) {
                 await loadRoot()
             }
         }
@@ -113,8 +117,8 @@ struct FilesSheetView: View {
     private var disconnectedState: some View {
         RunnerEmptyState(
             icon: "network.slash",
-            title: "Runner connection needed",
-            message: "Open Settings and point the app at your local runner stack first."
+            title: "Agent connection needed",
+            message: "Sign in and choose an agent first."
         )
     }
 
@@ -175,20 +179,7 @@ struct FilesSheetView: View {
                     ], spacing: 12) {
                         ForEach(directories) { directory in
                             NavigationLink(value: FileRoute.directory(directory.path, directory.name)) {
-                                VStack(spacing: 10) {
-                                    RunnerFolderGlyph(size: 52)
-
-                                    Text(directory.name)
-                                        .font(RunnerTypography.sans(12, weight: .semibold))
-                                        .foregroundStyle(RunnerTheme.primaryText)
-                                        .lineLimit(2)
-                                        .multilineTextAlignment(.center)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 112)
-                                .padding(.horizontal, 8)
-                                .runnerCard()
+                                RunnerDirectoryOverviewCard(name: directory.name)
                             }
                         }
                     }
@@ -244,6 +235,46 @@ struct FilesSheetView: View {
             rootEntries = []
             self.error = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+private struct RunnerDirectoryOverviewCard: View {
+    let name: String
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.22, green: 0.23, blue: 0.29).opacity(0.94),
+                            Color(red: 0.15, green: 0.16, blue: 0.21).opacity(0.98),
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(RunnerTheme.border.opacity(0.9), lineWidth: 1)
+                )
+
+            RunnerFolderGlyph(size: 54)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, 14)
+                .padding(.leading, 14)
+
+            Text(name)
+                .font(RunnerTypography.sans(12, weight: .semibold))
+                .foregroundStyle(RunnerTheme.primaryText)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 116)
     }
 }
 

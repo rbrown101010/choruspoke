@@ -3,12 +3,15 @@ import Foundation
 final class RunnerAPIClient {
     let config: RunnerConnectionConfig
     private let session: URLSession
-    private let jsonDecoder = JSONDecoder()
+    private let jsonDecoder: JSONDecoder
     private let jsonEncoder = JSONEncoder()
 
     init(config: RunnerConnectionConfig, session: URLSession = .shared) {
         self.config = config
         self.session = session
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        self.jsonDecoder = decoder
     }
 
     func fetchDevToken() async throws -> RunnerDevTokenResponse {
@@ -21,6 +24,17 @@ final class RunnerAPIClient {
 
     func bootstrap() async throws -> RunnerBootstrap {
         try await request(path: "/api/v1/bootstrap", responseType: RunnerBootstrap.self)
+    }
+
+    func exchangeBootstrapToken(_ bootstrapToken: String) async throws -> RunnerBootstrapExchangeResponse {
+        let body = try jsonEncoder.encode(["bootstrapToken": bootstrapToken])
+        return try await request(
+            path: "/api/v1/auth/exchange",
+            method: "POST",
+            body: body,
+            requiresAuth: false,
+            responseType: RunnerBootstrapExchangeResponse.self
+        )
     }
 
     func listFiles(path: String = "", showHidden: Bool = false) async throws -> RunnerFileListResponse {
@@ -130,11 +144,13 @@ final class RunnerAPIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
+        request.timeoutInterval = path == "/api/v1/marketplace/install" ? 600 : 60
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        if requiresAuth {
+        if requiresAuth, !config.normalizedToken.isEmpty {
             request.setValue("Bearer \(config.normalizedToken)", forHTTPHeaderField: "Authorization")
+            request.setValue(config.normalizedToken, forHTTPHeaderField: "x-masterclaw-token")
         }
 
         let (data, response) = try await session.data(for: request)
