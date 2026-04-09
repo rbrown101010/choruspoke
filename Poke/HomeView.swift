@@ -26,7 +26,11 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            RunnerBackgroundView()
+            RunnerBackgroundView(
+                accentColor: heroCardDescriptor.color.ambientPrimary,
+                haloColor: heroCardDescriptor.color.ambientSecondary,
+                centerColor: heroCardDescriptor.color.ambientTertiary
+            )
 
             VStack(spacing: 0) {
                 topBar
@@ -161,12 +165,13 @@ struct HomeView: View {
             .padding(.bottom, 24)
 
             Text(appModel.agentTitle)
-                .font(RunnerTypography.sans(34, weight: .semibold))
+                .font(RunnerTypography.sans(30, weight: .semibold))
                 .foregroundStyle(RunnerTheme.primaryText)
                 .tracking(-0.6)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
+                .padding(.horizontal, 22)
 
             Text(appModel.agentSubtitle)
                 .font(RunnerTypography.sans(14, weight: .medium))
@@ -230,11 +235,15 @@ struct HomeView: View {
                 .font(RunnerTypography.sans(13, weight: .semibold))
                 .foregroundStyle(RunnerTheme.primaryText)
                 .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 0)
 
             Image(systemName: "chevron.down")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(RunnerTheme.secondaryText)
         }
+        .frame(minWidth: 176, idealWidth: 204, maxWidth: 236, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
@@ -320,30 +329,38 @@ private struct RunnerAgentHeroCard: View {
                 .frame(width: 72, height: 22)
                 .offset(x: 16, y: 14)
 
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
+            Ellipse()
                 .fill(
-                    LinearGradient(
+                    RadialGradient(
                         colors: [
-                            Color.white.opacity(0.20),
-                            Color.white.opacity(0.08),
+                            Color.white.opacity(0.18),
+                            Color.white.opacity(0.05),
                             Color.clear,
                         ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
+                        center: .center,
+                        startRadius: 6,
+                        endRadius: 102
                     )
                 )
-                .frame(width: 176, height: 104)
+                .frame(width: 170, height: 118)
                 .blur(radius: 14)
-                .rotationEffect(.degrees(-10))
-                .offset(x: 18, y: 8)
+                .offset(x: -8, y: -10)
                 .blendMode(.screen)
 
-            Capsule(style: .continuous)
-                .fill(Color.white.opacity(0.10))
-                .frame(width: 78, height: 16)
-                .blur(radius: 6)
-                .offset(x: 92, y: 10)
-                .blendMode(.screen)
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.16),
+                    Color.white.opacity(0.05),
+                    Color.clear,
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .frame(width: 190, height: 54)
+            .blur(radius: 9)
+            .rotationEffect(.degrees(-6))
+            .offset(x: 0, y: -132)
+            .blendMode(.screen)
 
             RunnerAgentFigureView(color: color, figure: figure)
                 .frame(width: 292, height: 292)
@@ -513,25 +530,24 @@ private struct RunnerAgentSpecularOverlay: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
+            Ellipse()
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color.white.opacity(isInteracting ? 0.13 : 0.09),
-                            Color.white.opacity(isInteracting ? 0.045 : 0.025),
+                            Color.white.opacity(isInteracting ? 0.11 : 0.07),
+                            Color.white.opacity(isInteracting ? 0.03 : 0.018),
                             Color.clear,
                         ],
                         center: .center,
                         startRadius: 12,
-                        endRadius: 92
+                        endRadius: 86
                     )
                 )
-                .frame(width: 154, height: 92)
-                .blur(radius: isInteracting ? 8 : 11)
-                .rotationEffect(.degrees(-12))
+                .frame(width: 144, height: 98)
+                .blur(radius: isInteracting ? 9 : 12)
                 .offset(
-                    x: ((progressX - 0.5) * 20) - 34,
-                    y: ((progressY - 0.5) * 10) - 122
+                    x: ((progressX - 0.5) * 12) - 38,
+                    y: ((progressY - 0.5) * 8) - 124
                 )
 
             RoundedRectangle(cornerRadius: 28, style: .continuous)
@@ -552,23 +568,9 @@ private struct RunnerAgentSpecularOverlay: View {
                 .blur(radius: isInteracting ? 0.5 : 1.0)
                 .rotationEffect(.degrees(-22))
                 .offset(
-                    x: ((progressX - 0.5) * 26) + 18,
-                    y: ((progressY - 0.5) * 18) - 12
+                    x: ((progressX - 0.5) * 16) + 22,
+                    y: ((progressY - 0.5) * 12) - 8
                 )
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.12),
-                    Color.white.opacity(0.03),
-                    Color.clear,
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(width: 220, height: 80)
-            .blur(radius: 10)
-            .rotationEffect(.degrees(-8))
-            .offset(x: -10, y: -138)
         }
         .blendMode(.screen)
     }
@@ -698,6 +700,18 @@ private enum RunnerAgentHeroCardColor: String, CaseIterable {
         case .teal: return RunnerHeroRGB(hex: "#F0FCF9").color
         case .volt: return RunnerHeroRGB(hex: "#FBFDCF").color
         }
+    }
+
+    var ambientPrimary: Color {
+        backgroundTop
+    }
+
+    var ambientSecondary: Color {
+        figureTop
+    }
+
+    var ambientTertiary: Color {
+        borderTop
     }
 
     var roleTop: Color {

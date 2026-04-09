@@ -64,6 +64,10 @@ enum RunnerTypography {
 }
 
 struct RunnerBackgroundView: View {
+    var accentColor: Color = RunnerTheme.accentBlue
+    var haloColor: Color = RunnerTheme.blueHalo
+    var centerColor: Color = RunnerTheme.accentBlue
+
     var body: some View {
         ZStack {
             RunnerTheme.background
@@ -81,19 +85,19 @@ struct RunnerBackgroundView: View {
             .ignoresSafeArea()
 
             Circle()
-                .fill(RunnerTheme.accentBlue.opacity(0.16))
+                .fill(accentColor.opacity(0.16))
                 .frame(width: 360, height: 360)
                 .blur(radius: 96)
                 .offset(x: -145, y: 520)
 
             Circle()
-                .fill(RunnerTheme.blueHalo.opacity(0.12))
+                .fill(haloColor.opacity(0.12))
                 .frame(width: 330, height: 330)
                 .blur(radius: 92)
                 .offset(x: 150, y: 520)
 
             Circle()
-                .fill(RunnerTheme.accentBlue.opacity(0.08))
+                .fill(centerColor.opacity(0.08))
                 .frame(width: 260, height: 260)
                 .blur(radius: 88)
                 .offset(x: 0, y: 420)

@@ -476,7 +476,7 @@ struct NewAgentPageView: View {
                 } onContinue: {
                     confirmCustomAgentCreation(for: customNamingTemplate)
                 }
-                .transition(.opacity.combined(with: .move(edge: .trailing)))
+                .transition(.opacity)
                 .zIndex(8)
             }
 
@@ -1021,14 +1021,13 @@ private struct NewCustomAgentSetupView: View {
     let onContinue: () -> Void
 
     @FocusState private var nameFieldFocused: Bool
-    private let minimumNameLength = 3
 
     private var trimmedName: String {
         agentName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var canContinue: Bool {
-        trimmedName.count >= minimumNameLength
+        !trimmedName.isEmpty
     }
 
     private var clampedNameBinding: Binding<String> {
@@ -1042,120 +1041,87 @@ private struct NewCustomAgentSetupView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let topInset = proxy.safeAreaInsets.top
-            let bottomInset = max(proxy.safeAreaInsets.bottom, 16)
-            let contentTopPadding = topInset + 84
+            let contentWidth = min(proxy.size.width - 48, 360)
 
             ZStack {
-                RunnerBackgroundView()
+                Color.black.opacity(0.58)
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        onClose()
+                    }
 
-                Color.black.opacity(0.32)
-                    .ignoresSafeArea()
+                VStack {
+                    Spacer()
 
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 22) {
-                        VStack(spacing: 0) {
-                            RunnerLissajousView(style: template.figureStyle)
-                                .frame(width: 300, height: 196)
-                                .padding(.bottom, 6)
+                    VStack(spacing: 24) {
+                        Text("Name your agent")
+                            .font(RunnerTypography.sans(30, weight: .semibold))
+                            .foregroundStyle(RunnerTheme.primaryText)
 
-                            Text("Give your agent a name")
-                                .font(RunnerTypography.sans(30, weight: .semibold))
+                        VStack(spacing: 10) {
+                            TextField("", text: clampedNameBinding, prompt: Text("OpenClaw Agent").foregroundStyle(RunnerTheme.tertiaryText))
+                                .font(RunnerTypography.sans(24, weight: .medium))
                                 .foregroundStyle(RunnerTheme.primaryText)
                                 .multilineTextAlignment(.center)
-                                .padding(.horizontal, 20)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled()
+                                .submitLabel(.done)
+                                .focused($nameFieldFocused)
+                                .onSubmit {
+                                    guard canContinue else { return }
+                                    onContinue()
+                                }
+
+                            Rectangle()
+                                .fill(
+                                    nameFieldFocused
+                                        ? AnyShapeStyle(
+                                            LinearGradient(
+                                                colors: [RunnerTheme.accentBlue, template.accent],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        : AnyShapeStyle(RunnerTheme.borderStrong)
+                                )
+                                .frame(height: nameFieldFocused ? 2 : 1)
                         }
+                        .frame(width: contentWidth)
 
-                        VStack(alignment: .leading, spacing: 18) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                TextField("iOS Developer Agent", text: clampedNameBinding)
-                                    .font(RunnerTypography.sans(17, weight: .medium))
-                                    .foregroundStyle(RunnerTheme.primaryText)
-                                    .textInputAutocapitalization(.words)
-                                    .autocorrectionDisabled()
-                                    .submitLabel(.done)
-                                    .focused($nameFieldFocused)
-                                    .padding(.vertical, 12)
-                                    .onSubmit {
-                                        guard canContinue else { return }
-                                        onContinue()
-                                    }
-
-                                Rectangle()
-                                    .fill(
-                                        nameFieldFocused
-                                            ? AnyShapeStyle(
-                                                LinearGradient(
-                                                    colors: [RunnerTheme.accentBlue, template.accent],
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                )
+                        Button {
+                            guard canContinue else { return }
+                            onContinue()
+                        } label: {
+                            Text("Enter")
+                                .font(RunnerTypography.sans(16, weight: .semibold))
+                                .foregroundStyle(Color.white.opacity(canContinue ? 0.96 : 0.62))
+                                .frame(width: contentWidth)
+                                .padding(.vertical, 16)
+                                .background(
+                                    Capsule(style: .continuous)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: canContinue
+                                                    ? [RunnerTheme.accentBlue, template.accent]
+                                                    : [RunnerTheme.surface, RunnerTheme.surface],
+                                                startPoint: .leading,
+                                                endPoint: .trailing
                                             )
-                                            : AnyShapeStyle(RunnerTheme.borderStrong)
-                                    )
-                                    .frame(height: nameFieldFocused ? 2.5 : 1)
-                                    .animation(.easeInOut(duration: 0.18), value: nameFieldFocused)
-                            }
-
-                            Button(action: onContinue) {
-                                Text("Enter")
-                                    .font(RunnerTypography.sans(16, weight: .semibold))
-                                    .foregroundStyle(canContinue ? Color.white : RunnerTheme.secondaryText)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 17)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .fill(
-                                                LinearGradient(
-                                                    colors: canContinue
-                                                        ? [RunnerTheme.accentBlue, template.accent]
-                                                        : [RunnerTheme.surface, RunnerTheme.surface],
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                )
-                                            )
-                                    )
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                            .stroke(
-                                                canContinue ? Color.white.opacity(0.12) : RunnerTheme.borderStrong,
-                                                lineWidth: 1
-                                            )
-                                    )
-                            }
-                            .buttonStyle(ScaleButtonStyle())
-                            .disabled(!canContinue)
-                            .animation(.easeInOut(duration: 0.18), value: canContinue)
+                                        )
+                                )
                         }
-                        .padding(.horizontal, 20)
+                        .buttonStyle(ScaleButtonStyle())
+                        .disabled(!canContinue)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, contentTopPadding)
-                    .padding(.bottom, bottomInset + 20)
+                    .padding(.horizontal, 24)
+
+                    Spacer()
                 }
-                .scrollDismissesKeyboard(.interactively)
-                .overlay(alignment: .topLeading) {
-                    Button(action: onClose) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(RunnerTheme.primaryText)
-                            .frame(width: 40, height: 40)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(RunnerTheme.surface)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(RunnerTheme.borderStrong, lineWidth: 1)
-                            )
-                    }
-                    .buttonStyle(ScaleButtonStyle())
-                    .padding(.leading, 20)
-                    .padding(.top, topInset + 12)
-                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .ignoresSafeArea(.keyboard)
         .task {
             try? await Task.sleep(for: .milliseconds(260))
             guard !Task.isCancelled else { return }
