@@ -1044,7 +1044,7 @@ private struct NewCustomAgentSetupView: View {
             let contentWidth = min(proxy.size.width - 48, 360)
 
             ZStack {
-                Color.black.opacity(0.58)
+                RunnerBackgroundView()
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture {
